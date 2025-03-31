@@ -4,6 +4,7 @@
 #include "./AntiDebugger.hpp"
 #include <cstdio>
 #include <functional>
+#include <intrin.h>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -14,6 +15,17 @@
 //precompiler instructions -> replace the skCrypt(string) with a skCrypt(skCrypt'd_string) so that
 //the strings won't be caught by static analysis
 #include "skStr.h"
+
+#if defined(_M_X64)
+	// For 64-bit systems, use __readgsqword to get the PEB
+unsigned long eflags = (unsigned long)__readgsqword(0x0); // Read the GS segment (this isn't quite EFLAGS, but we'll use it for a placeholder)
+#elif defined(_M_IX86)
+	// For 32-bit systems, use __readfsdword to get the PEB
+unsigned long eflags = __readfsdword(0x0); // Read the FS segment (this isn't quite EFLAGS, but we'll use it for a placeholder)
+#else
+#error Unsupported platform
+#endif
+
 
 //disable warnings because #cleancode
 #pragma warning(disable : 6387)
@@ -570,8 +582,6 @@ int security::internal::cpu::mov_ss() {
 	BOOL found = FALSE;
 
 	// Store the current value of EFLAGS
-	unsigned long eflags = __readgsqword(0x0); // Read the GS segment (this isn't quite EFLAGS, but we'll use it for a placeholder)
-
 	// Check if the trap flag (bit 1) is set
 	if (eflags & 0x00000002) { // Check the second least significant bit (trap flag)
 		found = TRUE;
@@ -707,8 +717,14 @@ int security::internal::virtualization::vm() {
 		RegCloseKey(h_key);
 	}
 
-	// Replace inline assembly with __readgsqword
-	unsigned long long found = __readgsqword(0);
+	#if defined(_M_X64)
+		unsigned long long found = __readgsqword(0);
+	#elif defined(_M_IX86)
+		// For 32-bit systems, use __readfsd to get the PEB
+		unsigned long long found = __readfsdword(0);
+	#else
+	#error Unsupported platform
+	#endif
 	if (found == 0) {
 		return security::internal::debug_results::vm;
 	}
